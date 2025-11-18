@@ -4,15 +4,14 @@ const RiskAssessmentController = require('../controllers/riskAssessmentControlle
 const multer = require('multer');
 
 const router = express.Router();
-
-// Fix: Create instance properly
 const controller = new RiskAssessmentController();
 
-// Configure multer for file uploads
+// Configure multer for multiple file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit per file
+    files: 5 // Maximum 5 files
   },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
@@ -23,11 +22,12 @@ const upload = multer({
   }
 });
 
-// Routes
-router.post('/assess', upload.single('document'), (req, res) => 
-  controller.assessDocument(req, res)
+// Updated route to handle multiple files
+router.post('/assess', upload.array('documents', 5), (req, res) => 
+  controller.assessDocuments(req, res)
 );
 
+// ... rest of the routes remain the same
 router.get('/categories', (req, res) => 
   controller.getRiskCategories(req, res)
 );
@@ -46,7 +46,6 @@ router.get('/workflows', (req, res) => {
   });
 });
 
-// Health check endpoint
 router.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 

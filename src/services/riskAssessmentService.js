@@ -14,20 +14,23 @@ class RiskAssessmentService {
   }
 
   initializeChains() {
-    // Risk Categorization Chain
+    // Updated Risk Categorization Chain for combined documents
     this.riskCategorizationPrompt = new PromptTemplate({
       template: `
-      Analyze the following banking control self-assessment document and categorize risks:
+      Analyze the following combined banking documents and perform a comprehensive risk assessment.
       
-      DOCUMENT:
+      DOCUMENT CONTENT:
       {document}
       
-      Based on the banking regulations and internal controls described, categorize the identified risks into:
+      Based on the combined analysis of policy documents (summarized) and other documents (full content),
+      categorize the identified risks into:
       1. Compliance Risks
       2. Operational Risks
       3. Technological Risks
       4. Reputational Risks
       5. Financial Risks
+      
+      Consider how policies interact with operational documents to identify potential gaps or conflicts.
       
       Provide output in JSON format:
       {{
@@ -40,13 +43,16 @@ class RiskAssessmentService {
                 "severity": "HIGH|MEDIUM|LOW",
                 "impact": "string",
                 "likelihood": "HIGH|MEDIUM|LOW",
-                "controlEffectiveness": "EFFECTIVE|PARTIAL|INEFFECTIVE"
+                "controlEffectiveness": "EFFECTIVE|PARTIAL|INEFFECTIVE",
+                "relatedDocuments": ["filename1", "filename2"]
               }}
             ]
           }}
         ],
         "overallRiskRating": "HIGH|MEDIUM|LOW",
-        "keyFindings": ["string"]
+        "keyFindings": ["string"],
+        "policyGaps": ["string"],
+        "recommendations": ["string"]
       }}
       `,
       inputVariables: ["document"]
@@ -58,10 +64,11 @@ class RiskAssessmentService {
     });
   }
 
-  async assessRisks(processedDocument) {
+  async assessRisks(combinedDocument) {
+    console.log("combinedDocument",combinedDocument)
     try {
       const assessment = await this.riskCategorizationChain.call({
-        document: processedDocument.rawText
+        document: combinedDocument.rawText
       });
 
       return this.parseAssessment(assessment.text);
@@ -72,27 +79,25 @@ class RiskAssessmentService {
 
   parseAssessment(assessmentText) {
     try {
-      // Extract JSON from LLM response
       const jsonMatch = assessmentText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
       }
       throw new Error('Invalid assessment format');
     } catch (error) {
-      // Fallback parsing logic
       return this.fallbackParsing(assessmentText);
     }
   }
 
   fallbackParsing(text) {
-    // Implement robust fallback parsing logic
     return {
       riskCategories: [],
       overallRiskRating: "MEDIUM",
-      keyFindings: ["Assessment parsing requires manual review"]
+      keyFindings: ["Assessment parsing requires manual review"],
+      policyGaps: [],
+      recommendations: []
     };
   }
 }
-
 
 module.exports = RiskAssessmentService;
