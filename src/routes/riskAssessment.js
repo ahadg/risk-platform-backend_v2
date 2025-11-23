@@ -11,7 +11,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit per file
-    files: 5 // Maximum 5 files
+    files: 10 // Maximum 10 files
   },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
@@ -22,12 +22,16 @@ const upload = multer({
   }
 });
 
-// Updated route to handle multiple files
-router.post('/assess', upload.array('documents', 5), (req, res) => 
-  controller.assessDocuments(req, res)
+// Updated route to handle multiple files with enhanced processing
+router.post('/assess', upload.array('documents', 10), (req, res) => 
+  controller.assessDocumentsEnhanced(req, res)
 );
 
-// ... rest of the routes remain the same
+// Keep existing routes for backward compatibility
+router.post('/assess-single', upload.single('document'), (req, res) => 
+  controller.assessDocument(req, res)
+);
+
 router.get('/categories', (req, res) => 
   controller.getRiskCategories(req, res)
 );
@@ -37,10 +41,10 @@ router.get('/workflows', (req, res) => {
     success: true,
     workflows: [
       {
-        id: 'risk_assessment',
-        name: 'Document Risk Assessment',
-        description: 'Complete risk assessment workflow for uploaded documents',
-        steps: ['upload', 'process', 'analyze', 'report']
+        id: 'enhanced_risk_assessment',
+        name: 'Enhanced Risk Assessment',
+        description: 'Multi-document risk assessment with policy-questionnaire mapping',
+        steps: ['upload', 'classify', 'extract', 'parse', 'map', 'assess', 'report']
       }
     ]
   });
@@ -49,7 +53,7 @@ router.get('/workflows', (req, res) => {
 router.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
-    service: 'Risk Assessment API',
+    service: 'Enhanced Risk Assessment API',
     timestamp: new Date().toISOString()
   });
 });
