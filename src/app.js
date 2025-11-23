@@ -2,6 +2,7 @@
 const express = require('express');
 const multer = require('multer');
 require('dotenv').config();
+const cors = require('cors');
 
 
 const riskAssessmentRoutes = require('./routes/riskAssessment');
@@ -17,6 +18,9 @@ class RiskAssessmentApp {
   setupMiddleware() {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
+
+    // Enable CORS for all routes
+    this.app.use(cors());
 
     // Multer configuration for file uploads
     this.upload = multer({
@@ -36,7 +40,7 @@ class RiskAssessmentApp {
 
   setupRoutes() {
     this.app.use('/api/risk-assessment', riskAssessmentRoutes);
-    
+
     this.app.get('/health', (req, res) => {
       res.json({ status: 'OK', timestamp: new Date().toISOString() });
     });
@@ -52,7 +56,7 @@ class RiskAssessmentApp {
     });
   }
 
-  start(port = 3000) {
+  start(port = 4002) {
     this.server = this.app.listen(port, () => {
       console.log(`Risk Assessment API running on port ${port}`);
     });

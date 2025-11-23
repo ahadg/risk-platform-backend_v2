@@ -9,24 +9,25 @@ class RiskAssessmentController {
     this.documentProcessor = new DocumentProcessor();
     this.riskService = new RiskAssessmentService();
     this.workflowService = new WorkflowService();
+    this.savedResults = [];
   }
 
   // Enhanced multi-document assessment
   async assessDocumentsEnhanced(req, res) {
     try {
       console.log('Enhanced assessment - Files received:', req.files?.length);
-      
+
       if (!req.files || req.files.length === 0) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
-          error: 'No files uploaded' 
+          error: 'No files uploaded'
         });
       }
 
       // Classify files
       const policyFiles = req.files.filter(f => this.riskService.isPolicyLike(f.originalname));
       const questionnaireFiles = req.files.filter(f => this.riskService.isQuestionnaireLike(f.originalname));
-      
+
       console.log(`Classification - Policies: ${policyFiles.length}, Questionnaires: ${questionnaireFiles.length}`);
 
       if (policyFiles.length === 0) {
@@ -84,7 +85,7 @@ class RiskAssessmentController {
       console.log('Assessing risks...');
       const assessments = await Promise.all(
         structuredQuestionnaires.map(async (q) => {
-          console.log("Q:",q.structured)
+          console.log("Q:", q.structured)
           const assessment = await this.riskService.assessRisksFromQuestionnaire(q.structured);
           return {
             fileName: q.fileName,
@@ -96,26 +97,31 @@ class RiskAssessmentController {
       // 5. Generate combined report
       const combinedReport = this.generateCombinedReport(assessments, policyTexts);
 
+      const resultData = {
+        fileClassification: {
+          policyFiles: policyFiles.map(f => f.originalname),
+          questionnaireFiles: questionnaireFiles.map(f => f.originalname)
+        },
+        assessments: assessments,
+        combinedReport: combinedReport,
+        workflowId: this.generateWorkflowId(),
+        timestamp: new Date().toISOString(),
+        totalFiles: req.files.length
+      };
+
+      // Save to memory
+      this.savedResults.push(resultData);
+
       res.json({
         success: true,
-        data: {
-          fileClassification: {
-            policyFiles: policyFiles.map(f => f.originalname),
-            questionnaireFiles: questionnaireFiles.map(f => f.originalname)
-          },
-          assessments: assessments,
-          combinedReport: combinedReport,
-          workflowId: this.generateWorkflowId(),
-          timestamp: new Date().toISOString(),
-          totalFiles: req.files.length
-        }
+        data: resultData
       });
 
     } catch (error) {
       console.error('Enhanced risk assessment error:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
-        error: 'Enhanced risk assessment failed', 
+        error: 'Enhanced risk assessment failed',
         details: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
@@ -135,7 +141,7 @@ class RiskAssessmentController {
   // Generate combined report across all assessments
   generateCombinedReport(assessments, policyTexts) {
     const allRisks = assessments.flatMap(a => a.assessment.risks || []);
-    
+
     // Aggregate risks by category
     const risksByCategory = {};
     allRisks.forEach(risk => {
@@ -171,7 +177,7 @@ class RiskAssessmentController {
 
   generateOverallRecommendations(risks) {
     const recommendations = new Set();
-    
+
     risks.forEach(risk => {
       if (risk.recommendedActions) {
         risk.recommendedActions.forEach(action => recommendations.add(action));
@@ -181,59 +187,7 @@ class RiskAssessmentController {
     return Array.from(recommendations).slice(0, 15);
   }
 
-  // Original single file method (for backward compatibility)
-  async assessDocument(req, res) {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'No file uploaded' 
-        });
-      }
 
-      // Use enhanced service for single file
-      const text = await this.extractTextFromPdf(req.file.buffer);
-      
-      let assessment;
-      if (this.riskService.isPolicyLike(req.file.originalname)) {
-        // For single policy file, do basic analysis
-        await this.riskService.indexPolicies([text]);
-        assessment = {
-          fileName: req.file.originalname,
-          type: 'policy',
-          message: 'Policy indexed. Please upload questionnaires for risk assessment.'
-        };
-      } else if (this.riskService.isQuestionnaireLike(req.file.originalname)) {
-        // For single questionnaire, need policies - return error
-        return res.status(400).json({
-          success: false,
-          error: 'Questionnaire uploaded but no policies found. Please upload policy documents for risk assessment.'
-        });
-      } else {
-        // Fallback to original behavior
-        const processedDoc = await this.documentProcessor.processDocument(req.file.buffer);
-        assessment = await this.riskService.assessRisks(processedDoc);
-      }
-
-      res.json({
-        success: true,
-        data: {
-          assessment: assessment,
-          workflowId: this.generateWorkflowId(),
-          timestamp: new Date().toISOString(),
-          fileName: req.file.originalname
-        }
-      });
-
-    } catch (error) {
-      console.error('Risk assessment error:', error);
-      res.status(500).json({ 
-        success: false,
-        error: 'Risk assessment failed', 
-        details: error.message 
-      });
-    }
-  }
 
   async getRiskCategories(req, res) {
     const categories = [
@@ -275,9 +229,120 @@ class RiskAssessmentController {
       }
     ];
 
-    res.json({ 
+    res.json({
       success: true,
-      categories 
+      categories
+    });
+  }
+
+  // Intelligent single file assessment
+  async assessSingleFileIntelligently(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: 'No file uploaded'
+        });
+      }
+
+      console.log(`Processing single file: ${req.file.originalname}`);
+
+      // 1. Extract text from PDF
+      const text = await this.extractTextFromPdf(req.file.buffer);
+
+      // 2. Direct intelligent assessment (no questionnaire parsing)
+      const assessment = await this.riskService.assessDirectFromText(text, req.file.originalname);
+
+      // 3. Transform to Risk Register format
+      const riskRegister = assessment.risks.map(risk => ({
+        riskId: risk.riskId,
+        description: risk.description,
+        category: risk.category,
+        impact: risk.impact,
+        likelihood: risk.likelihood,
+        severity: risk.overallRating,
+        evidence: risk.evidence,
+        recommendation: Array.isArray(risk.recommendedActions)
+          ? risk.recommendedActions.join('; ')
+          : risk.recommendedActions || 'No recommendation provided'
+      }));
+
+      // 4. Create result object
+      const result = {
+        id: assessment.assessmentId,
+        fileName: req.file.originalname,
+        timestamp: assessment.timestamp,
+        riskRegister: riskRegister,
+        summary: {
+          totalRisks: riskRegister.length,
+          highSeverity: riskRegister.filter(r => r.severity === 'High' || r.severity === 'Very High').length,
+          mediumSeverity: riskRegister.filter(r => r.severity === 'Medium').length,
+          lowSeverity: riskRegister.filter(r => r.severity === 'Low').length,
+          overallAssessment: assessment.summary?.overallAssessment || `Assessed ${riskRegister.length} risk(s)`
+        }
+      };
+
+      // 5. Save to memory
+      this.savedResults.push(result);
+
+      res.json({
+        success: true,
+        data: result
+      });
+
+    } catch (error) {
+      console.error('Single file assessment error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Assessment failed',
+        details: error.message
+      });
+    }
+  }
+
+  // Transform assessment to Risk Register format
+  transformToRiskRegister(assessment, fileName) {
+    if (!assessment || !assessment.risks) {
+      return [];
+    }
+
+    return assessment.risks.map((risk, index) => {
+      return {
+        riskId: `RISK-${Date.now()}-${String(index + 1).padStart(3, '0')}`,
+        description: risk.description || risk.riskDescription || 'No description available',
+        category: risk.category || 'Uncategorized',
+        impact: risk.impact || risk.impactRating || 'Not assessed',
+        likelihood: risk.likelihood || risk.likelihoodRating || 'Not assessed',
+        severity: risk.overallRating || this.calculateSeverity(risk.impact, risk.likelihood),
+        evidence: risk.evidence || risk.policyReference || 'No evidence provided',
+        recommendation: Array.isArray(risk.recommendedActions)
+          ? risk.recommendedActions.join('; ')
+          : risk.recommendedActions || risk.mitigation || 'No recommendation provided'
+      };
+    });
+  }
+
+  // Calculate severity if not provided
+  calculateSeverity(impact, likelihood) {
+    const impactMap = { 'Very High': 5, 'High': 4, 'Medium': 3, 'Low': 2, 'Very Low': 1 };
+    const likelihoodMap = { 'Very High': 5, 'High': 4, 'Medium': 3, 'Low': 2, 'Very Low': 1 };
+
+    const impactScore = impactMap[impact] || 0;
+    const likelihoodScore = likelihoodMap[likelihood] || 0;
+    const totalScore = impactScore * likelihoodScore;
+
+    if (totalScore >= 16) return 'Very High';
+    if (totalScore >= 9) return 'High';
+    if (totalScore >= 4) return 'Medium';
+    return 'Low';
+  }
+
+  // Get all saved results
+  getAllResults(req, res) {
+    res.json({
+      success: true,
+      count: this.savedResults.length,
+      data: this.savedResults
     });
   }
 

@@ -23,17 +23,27 @@ const upload = multer({
 });
 
 // Updated route to handle multiple files with enhanced processing
-router.post('/assess', upload.array('documents', 10), (req, res) => 
+router.post('/assess', upload.array('documents', 10), (req, res) =>
   controller.assessDocumentsEnhanced(req, res)
 );
 
 // Keep existing routes for backward compatibility
-router.post('/assess-single', upload.single('document'), (req, res) => 
+router.post('/assess-single', upload.single('document'), (req, res) =>
   controller.assessDocument(req, res)
 );
 
-router.get('/categories', (req, res) => 
+router.get('/categories', (req, res) =>
   controller.getRiskCategories(req, res)
+);
+
+// New route for intelligent single file assessment
+router.post('/assess-file', upload.single('file'), (req, res) =>
+  controller.assessSingleFileIntelligently(req, res)
+);
+
+// New route to get all saved results
+router.get('/results', (req, res) =>
+  controller.getAllResults(req, res)
 );
 
 router.get('/workflows', (req, res) => {
@@ -51,8 +61,8 @@ router.get('/workflows', (req, res) => {
 });
 
 router.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     service: 'Enhanced Risk Assessment API',
     timestamp: new Date().toISOString()
   });
