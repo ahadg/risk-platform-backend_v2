@@ -1,4 +1,4 @@
-export const sammurizeText = `Rules for Bank Accounts
+const sammurizeText = `Rules for Bank Accounts
 Updated
 March 2022
 Important Note:
@@ -4694,3 +4694,5 @@ values of the other nine digits. It is used to check the correctness of the comp
 entity wishing to receive the formula applied to derive this digit for programming purposes, may
 contact the National Information Center of the Ministry of Interior..
 113`
+
+module.exports = { sammurizeText };
